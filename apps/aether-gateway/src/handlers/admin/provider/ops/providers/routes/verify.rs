@@ -53,7 +53,7 @@ pub(super) async fn handle_admin_provider_ops_verify(
                     Ok(snapshot) => (
                         Some(snapshot.provider),
                         snapshot.credentials,
-                        Some(snapshot.saved_binding),
+                        snapshot.saved_binding,
                         snapshot.reused_saved_secret,
                     ),
                     Err(detail) => {

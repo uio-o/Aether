@@ -45,6 +45,7 @@ pub(super) async fn handle_admin_provider_ops_verify(
                 match admin_provider_ops_merge_credentials(
                     state,
                     &payload.architecture_id,
+                    &payload.connector.auth_type,
                     provider,
                     payload.connector.credentials.clone(),
                 )

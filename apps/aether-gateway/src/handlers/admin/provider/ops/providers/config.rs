@@ -202,6 +202,7 @@ fn admin_provider_ops_sensitive_placeholder_or_empty(value: Option<&serde_json::
 pub(super) async fn admin_provider_ops_merge_credentials(
     state: &AdminAppState<'_>,
     architecture_id: &str,
+    request_auth_type: &str,
     provider: &StoredProviderCatalogProvider,
     mut request_credentials: serde_json::Map<String, serde_json::Value>,
 ) -> Result<AdminProviderOpsMergedCredentialSnapshot, String> {
@@ -227,9 +228,19 @@ pub(super) async fn admin_provider_ops_merge_credentials(
         saved_credentials.retain(|key, _| !key.starts_with('_'));
     }
 
+    // Switching the connector auth type replaces the whole credential
+    // set (session_login uses email/password, api_key uses refresh_token,
+    // ...). Reusing stored secrets across that switch would resurrect
+    // fields that belong to the previous auth type and would trip the
+    // "must re-enter credentials" guard below, so only reuse secrets when
+    // the auth type stays the same.
+    let auth_type_stays_the_same = snapshot.binding.auth_type == request_auth_type;
     let mut reused_saved_secret = false;
     for field in PROVIDER_OPS_PERSISTENT_SECRET_FIELDS {
         if field.starts_with('_') {
+            continue;
+        }
+        if !auth_type_stays_the_same {
             continue;
         }
         if admin_provider_ops_sensitive_placeholder_or_empty(request_credentials.get(*field))
@@ -462,6 +473,7 @@ pub(super) async fn build_admin_provider_ops_saved_config_value(
     let merged = admin_provider_ops_merge_credentials(
         state,
         normalized_architecture_id,
+        &auth_type,
         provider,
         payload.connector.credentials,
     )
@@ -857,6 +869,7 @@ mod tests {
         let merged = admin_provider_ops_merge_credentials(
             &admin_state,
             "generic_api",
+            "api_key",
             &provider,
             credentials,
         )
@@ -922,5 +935,31 @@ mod tests {
         assert!(merged.saved_binding.is_some());
         assert!(merged.reused_saved_secret);
         assert_eq!(merged.credentials["api_key"], TEST_API_KEY);
+    }
+
+    #[tokio::test]
+    async fn switching_auth_type_does_not_reuse_previous_auth_secrets() {
+        let provider = provider_with_api_key(TEST_API_KEY);
+        let (state, _repository) = state_with_provider(provider.clone());
+        let admin_state = AdminAppState::new(&state);
+        // The stored provider uses `api_key`; the request switches to
+        // `session_login` and does not carry an api_key, so the stored
+        // api_key must not be resurrected as a reused secret.
+        let mut credentials = serde_json::Map::new();
+        credentials.insert("email".to_string(), json!("owner@example.com"));
+        credentials.insert("password".to_string(), json!("new-password"));
+
+        let merged = admin_provider_ops_merge_credentials(
+            &admin_state,
+            "generic_api",
+            "session_login",
+            &provider,
+            credentials,
+        )
+        .await
+        .expect("switching the auth type should not fail");
+        assert!(!merged.reused_saved_secret);
+        assert_eq!(merged.credentials["password"], json!("new-password"));
+        assert!(!merged.credentials.contains_key("api_key"));
     }
 }

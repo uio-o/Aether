@@ -66,65 +66,29 @@ pub(super) async fn handle_admin_provider_ops_save_config(
             saved = true;
             break;
         }
-        let dbg_keys: Vec<String> = snapshot
-            .provider
-            .config
-            .as_ref()
-            .and_then(serde_json::Value::as_object)
-            .map(|map| {
-                let mut keys: Vec<String> = map.keys().cloned().collect();
-                keys.sort();
-                keys
-            })
-            .unwrap_or_default();
-        let dbg_cred_keys: Vec<String> = snapshot
-            .provider
-            .config
-            .as_ref()
-            .and_then(|cfg| cfg.get("provider_ops"))
-            .and_then(serde_json::Value::as_object)
-            .and_then(|ops| ops.get("connector"))
-            .and_then(serde_json::Value::as_object)
-            .and_then(|conn| conn.get("credentials"))
-            .and_then(serde_json::Value::as_object)
-            .map(|map| {
-                let mut keys: Vec<String> = map.keys().cloned().collect();
-                keys.sort();
-                keys
-            })
-            .unwrap_or_default();
+        let dbg_hash = |v: &Option<serde_json::Value>| -> String {
+            match v {
+                Some(value) => {
+                    let mut bytes = serde_json::to_vec(value).unwrap_or_default();
+                    bytes.sort();
+                    format!("{:x}", std::collections::hash_map::DefaultHasher::new().finish())
+                }
+                None => "none".to_string(),
+            }
+        };
         tracing::warn!(
             provider_id = %provider_id,
-            top_keys = ?dbg_keys,
-            credential_keys = ?dbg_cred_keys,
-            "DEBUG provider ops save cas conflict keys"
-        );
-        // The provider catalog read path keeps a short-lived cache, so an
-        // immediate retry would otherwise re-read the very same stale
-        // expected_config and never converge. Invalidate the catalog cache
-        // before re-reading so the next attempt compares against the row
-        // that is actually in the database right now.
-        state.app().invalidate_provider_runtime_state_caches();
-        let dbg_after_keys: Vec<String> = state
-            .read_provider_catalog_providers_by_ids(&provider_ids)
-            .await
-            .ok()
-            .and_then(|v| v.into_iter().next())
-            .and_then(|p| p.config)
-            .and_then(|c| c.get("provider_ops").cloned())
-            .and_then(|o| o.get("connector").cloned())
-            .and_then(|c| c.get("credentials").cloned())
-            .and_then(|c| c.as_object().cloned())
-            .map(|m| {
-                let mut k: Vec<String> = m.keys().cloned().collect();
-                k.sort();
-                k
-            })
-            .unwrap_or_default();
-        tracing::warn!(
-            provider_id = %provider_id,
-            after_invalidate_credential_keys = ?dbg_after_keys,
-            "DEBUG after invalidate re-read"
+            expected_len = ?snapshot.provider.config.as_ref().map(|v| v.to_string().len()),
+            expected_cred_len = ?snapshot
+                .provider
+                .config
+                .as_ref()
+                .and_then(|c| c.get("provider_ops"))
+                .and_then(|o| o.get("connector"))
+                .and_then(|c| c.get("credentials"))
+                .and_then(|c| c.as_object())
+                .map(|m| m.len()),
+            "DEBUG iteration expected shape"
         );
         let Some(current) = state
             .read_provider_catalog_providers_by_ids(&provider_ids)

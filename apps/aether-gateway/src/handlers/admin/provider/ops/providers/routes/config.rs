@@ -105,6 +105,27 @@ pub(super) async fn handle_admin_provider_ops_save_config(
         // before re-reading so the next attempt compares against the row
         // that is actually in the database right now.
         state.app().invalidate_provider_runtime_state_caches();
+        let dbg_after_keys: Vec<String> = state
+            .read_provider_catalog_providers_by_ids(&provider_ids)
+            .await
+            .ok()
+            .and_then(|v| v.into_iter().next())
+            .and_then(|p| p.config)
+            .and_then(|c| c.get("provider_ops").cloned())
+            .and_then(|o| o.get("connector").cloned())
+            .and_then(|c| c.get("credentials").cloned())
+            .and_then(|c| c.as_object().cloned())
+            .map(|m| {
+                let mut k: Vec<String> = m.keys().cloned().collect();
+                k.sort();
+                k
+            })
+            .unwrap_or_default();
+        tracing::warn!(
+            provider_id = %provider_id,
+            after_invalidate_credential_keys = ?dbg_after_keys,
+            "DEBUG after invalidate re-read"
+        );
         let Some(current) = state
             .read_provider_catalog_providers_by_ids(&provider_ids)
             .await?

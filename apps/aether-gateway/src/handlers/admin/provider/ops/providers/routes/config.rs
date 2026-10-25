@@ -66,10 +66,38 @@ pub(super) async fn handle_admin_provider_ops_save_config(
             saved = true;
             break;
         }
+        let dbg_keys: Vec<String> = snapshot
+            .provider
+            .config
+            .as_ref()
+            .and_then(serde_json::Value::as_object)
+            .map(|map| {
+                let mut keys: Vec<String> = map.keys().cloned().collect();
+                keys.sort();
+                keys
+            })
+            .unwrap_or_default();
+        let dbg_cred_keys: Vec<String> = snapshot
+            .provider
+            .config
+            .as_ref()
+            .and_then(|cfg| cfg.get("provider_ops"))
+            .and_then(serde_json::Value::as_object)
+            .and_then(|ops| ops.get("connector"))
+            .and_then(serde_json::Value::as_object)
+            .and_then(|conn| conn.get("credentials"))
+            .and_then(serde_json::Value::as_object)
+            .map(|map| {
+                let mut keys: Vec<String> = map.keys().cloned().collect();
+                keys.sort();
+                keys
+            })
+            .unwrap_or_default();
         tracing::warn!(
             provider_id = %provider_id,
-            expected_config = ?snapshot.provider.config,
-            "DEBUG provider ops save cas conflict"
+            top_keys = ?dbg_keys,
+            credential_keys = ?dbg_cred_keys,
+            "DEBUG provider ops save cas conflict keys"
         );
         // The provider catalog read path keeps a short-lived cache, so an
         // immediate retry would otherwise re-read the very same stale

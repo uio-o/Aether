@@ -66,6 +66,11 @@ pub(super) async fn handle_admin_provider_ops_save_config(
             saved = true;
             break;
         }
+        tracing::warn!(
+            provider_id = %provider_id,
+            expected_config = ?snapshot.provider.config,
+            "DEBUG provider ops save cas conflict"
+        );
         // The provider catalog read path keeps a short-lived cache, so an
         // immediate retry would otherwise re-read the very same stale
         // expected_config and never converge. Invalidate the catalog cache

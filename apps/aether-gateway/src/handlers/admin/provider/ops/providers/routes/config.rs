@@ -66,30 +66,15 @@ pub(super) async fn handle_admin_provider_ops_save_config(
             saved = true;
             break;
         }
-        let dbg_hash = |v: &Option<serde_json::Value>| -> String {
-            match v {
-                Some(value) => {
-                    let mut bytes = serde_json::to_vec(value).unwrap_or_default();
-                    bytes.sort();
-                    format!("{:x}", std::collections::hash_map::DefaultHasher::new().finish())
-                }
-                None => "none".to_string(),
+        if let Some(expected) = snapshot.provider.config.as_ref() {
+            if let Some(text) = serde_json::to_string(expected).ok() {
+                tracing::warn!(
+                    provider_id = %provider_id,
+                    expected_json_text = %text,
+                    "DEBUG expected raw json text"
+                );
             }
-        };
-        tracing::warn!(
-            provider_id = %provider_id,
-            expected_len = ?snapshot.provider.config.as_ref().map(|v| v.to_string().len()),
-            expected_cred_len = ?snapshot
-                .provider
-                .config
-                .as_ref()
-                .and_then(|c| c.get("provider_ops"))
-                .and_then(|o| o.get("connector"))
-                .and_then(|c| c.get("credentials"))
-                .and_then(|c| c.as_object())
-                .map(|m| m.len()),
-            "DEBUG iteration expected shape"
-        );
+        }
         let Some(current) = state
             .read_provider_catalog_providers_by_ids(&provider_ids)
             .await?

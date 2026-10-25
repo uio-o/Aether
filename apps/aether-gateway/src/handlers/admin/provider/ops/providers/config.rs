@@ -380,7 +380,7 @@ pub(crate) async fn admin_provider_ops_credential_snapshot(
         }
 
         current = state
-            .read_provider_catalog_providers_by_ids(std::slice::from_ref(&current.id))
+            .read_provider_catalog_providers_by_ids(std::slice::from_ref(&provider.id))
             .await?
             .into_iter()
             .next()
@@ -442,6 +442,12 @@ pub(super) async fn persist_admin_provider_ops_runtime_credentials(
                 .into_iter()
                 .next());
         }
+        // The provider catalog read path keeps a short-lived cache, so an
+        // immediate retry would otherwise re-read the very same stale
+        // expected_config and never converge. Invalidate the catalog cache
+        // before re-reading so the next attempt compares against the row
+        // that is actually in the database right now.
+        state.app().invalidate_provider_runtime_state_caches();
         current = state
             .read_provider_catalog_providers_by_ids(std::slice::from_ref(&provider.id))
             .await?

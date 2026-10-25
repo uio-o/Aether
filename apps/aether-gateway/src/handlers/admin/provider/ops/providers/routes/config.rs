@@ -66,6 +66,12 @@ pub(super) async fn handle_admin_provider_ops_save_config(
             saved = true;
             break;
         }
+        // The provider catalog read path keeps a short-lived cache, so an
+        // immediate retry would otherwise re-read the very same stale
+        // expected_config and never converge. Invalidate the catalog cache
+        // before re-reading so the next attempt compares against the row
+        // that is actually in the database right now.
+        state.app().invalidate_provider_runtime_state_caches();
         let Some(current) = state
             .read_provider_catalog_providers_by_ids(&provider_ids)
             .await?

@@ -7,7 +7,7 @@ on:
       - 'fix/**'
     paths:
       - '.github/workflows/build-fix-image.yml'
-      - 'apps/aether-gateway/src/handlers/admin/provider/ops/providers/**'
+      - 'apps/aether-gateway/src/handlers/admin/provider/ops/**'
 
 permissions:
   contents: read
